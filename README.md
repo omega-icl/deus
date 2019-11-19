@@ -12,7 +12,7 @@ DEsign under Uncertainty using Sampling techniques (DEUS for short) offers Neste
 ## **2. Building the package**
 As a package development collaborator you want to allow others to use the 'deus' package. More specifically, you would like to send to the users an archive file which they can easily use to install the package on their machines. Below you find how to do that.
 
-## **2.1 Building a source distribution
+## **2.1 Building a source distribution**
 We create a deus-<version>.tar.gz archive which can be sent to any user and (s)he can install the 'deus' package simply by running in Command Prompt (or equivalent) the following command 'pip install deus-<version>.tar.gz'.
 
 How to do that?
