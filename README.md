@@ -5,10 +5,8 @@
 
 DEsign under Uncertainty using Sampling techniques (DEUS for short) offers Nested Sampling based methods for solving the following problems:
 - parameter estimation (PE)
-- parameter set membership (PSM) <-- NOT IMPLEMENTED YET
+- parameter set membership (PSM)
 - design space characterization (DS)
-- experiment design (ED) <-- NOT IMPLEMENTED YET
-
 
 
 ## **2. Building the package**
