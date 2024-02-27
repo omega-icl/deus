@@ -4,9 +4,9 @@ from os import getcwd
 import pickle
 from scipy.stats import multivariate_normal
 import time
-from casadi import *
+from casadi import *       # TODO casadi must be installed, or this will fail
 
-from duu import DUU
+from deus import DEUS
 
 
 '''
@@ -122,7 +122,7 @@ an_activity_form = {
 }
 
 # Running and processing
-the_duu = DUU(an_activity_form)
+the_duu = DEUS(an_activity_form)
 t0 = time.time()
 the_duu.solve()
 cpu_time = time.time() - t0

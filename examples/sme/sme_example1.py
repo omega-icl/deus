@@ -5,7 +5,7 @@ import pickle
 from scipy.stats import multivariate_normal
 import time
 
-from duu import DUU
+from deus import DEUS
 
 
 '''
@@ -49,7 +49,7 @@ an_activity_form = {
     },
 
     "problem": {
-        "goal": "posterior",
+        "goal": "posterior",     # TODO errors in problem definition, all checks passed for PE and DS
         "log_pi": log_prior,
         "log_l": log_lkhd,
         "parameters": params
@@ -91,7 +91,7 @@ an_activity_form = {
 }
 
 # Running and processing
-the_duu = DUU(an_activity_form)
+the_duu = DEUS(an_activity_form)
 t0 = time.time()
 the_duu.solve()
 cpu_time = time.time() - t0
