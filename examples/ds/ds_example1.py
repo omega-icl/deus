@@ -6,7 +6,7 @@ import pickle
 from scipy.stats import multivariate_normal
 import time
 
-from duu import DUU
+from deus import DEUS
 
 
 '''
@@ -28,7 +28,7 @@ class ModelA:
         pass
 
     def s(self, d, p):
-        d1, d2 = d
+        d1, d2 = d[:,0], d[:,1]
         p1 = p[0]
         x1 = p1*d1**2 + d2
         return x1
@@ -39,7 +39,7 @@ class ModelA:
         g1 = s - 0.2
         g2 = 0.75 - s
         ans = np.array([g1, g2])
-        return ans
+        return ans   
 
 
 the_model = ModelA()
@@ -50,7 +50,7 @@ p_sdev = np.sqrt(0.3)
 np.random.seed(1)
 n_samples_p = 100
 p_samples = np.random.normal(p_best, p_sdev, n_samples_p)
-p_samples = [{'c': [p], 'w': 1.0/n_samples_p} for p in p_samples]
+p_samples = [{'c': [p], 'w': 1.0/n_samples_p} for p in p_samples]    # TODO there is a list index error here that is generated in the efp_evaluator, when solver is called
 
 the_activity_form = {
     "activity_type": "ds",
@@ -127,7 +127,7 @@ the_activity_form = {
     }
 }
 
-the_duu = DUU(the_activity_form)
+the_duu = DEUS(the_activity_form)
 t0 = time.time()
 the_duu.solve()
 cpu_secs = time.time() - t0

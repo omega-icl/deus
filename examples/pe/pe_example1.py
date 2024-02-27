@@ -5,7 +5,7 @@ import pickle
 from scipy.stats import multivariate_normal
 import time
 
-from duu import DUU
+from deus import DEUS
 '''
 Parameter Estimation - Example 1:
 Let the 2D Rosenbrock function be the likelihood function
@@ -23,7 +23,7 @@ def log_lkhd(p):
     for j in range(n_dims-1):
         rosenbrock += 100.0*(p[j+1] - p[j]**2)**2 + (1.0 - p[j])**2
     log_l = -rosenbrock
-    return log_l
+    return log_l     # TODO this generates an error (100 points evaluated, results in 2 fn values. )
 
 
 an_activity_form = {
@@ -84,7 +84,7 @@ an_activity_form = {
     }
 }
 
-the_duu = DUU(an_activity_form)
+the_duu = DEUS(an_activity_form)
 t0 = time.time()
 the_duu.solve()
 cpu_time = time.time() - t0
