@@ -1,30 +1,29 @@
 import numpy as np
 
-from deus.activities.solvers.evaluators import \
-    ExpensiveFunctionEvaluator
-from deus.activities.solvers.evaluators.dsscore_data_handler import\
-    DSScoreEvalDataHandler
-from deus.activities.solvers.evaluators.dsscore_script_handler import\
-    DSScoreEvalScriptHandler
+from deus.activities.solvers.evaluators import ExpensiveFunctionEvaluator
+from deus.activities.solvers.evaluators.dsefp.data_handler import\
+    EFPEvalDataHandler
+from deus.activities.solvers.evaluators.dsefp.script_handler import\
+    EFPEvalScriptHandler
 
 
-class DSScoreEvaluator(ExpensiveFunctionEvaluator):
-    def __init__(self, info, eval_method, eval_options, p_best):
+class EFPEvaluator(ExpensiveFunctionEvaluator):
+    def __init__(self, info, eval_method, eval_options, p_samples):
         super().__init__(info)
 
         eval_path = self.ufunc_script_path
-        self._data_handler = DSScoreEvalDataHandler(eval_path, p_best)
+        self._data_handler = EFPEvalDataHandler(eval_path, p_samples)
 
         script_handler_info = {
             'eval_path': self.ufunc_script_path,
             'ufunc_script_name': self.ufunc_script_name,
             'ufunc_name': self.ufunc_name,
         }
-        self._script_handler = \
-            DSScoreEvalScriptHandler(script_handler_info,
-                                     eval_method,
-                                     eval_options,
-                                     self._data_handler)
+        self._script_handler =\
+            EFPEvalScriptHandler(script_handler_info,
+                                 eval_method,
+                                 eval_options,
+                                 self._data_handler)
 
         self._eval_method = None
         self.set_eval_method(eval_method)
@@ -70,36 +69,39 @@ class DSScoreEvaluator(ExpensiveFunctionEvaluator):
                 self._evaluate_using_script(inputs)
                 the_data = self._data_handler.get_data()
                 func_values = the_data['out']
+                n_model_evals = the_data['n_model_evals']
                 if self._eval_options['store_constraints']:
                     g_list = the_data['g_list']
                 else:
                     g_list = []
 
             else:  # Don't use evaluation script
-                func_values, g_list = self._expensive_func(inputs)
+                func_values, n_model_evals, g_list = \
+                    self._expensive_func(inputs)
 
         elif self._eval_method == "mppool":
             # assert False, "not implemented yet."
             self._evaluate_using_script(inputs)
             the_data = self._data_handler.get_data()
             func_values = the_data['out']
+            n_model_evals = sum(the_data['n_model_evals'])
             g_list = the_data['g_list']
 
         elif self._eval_method == "mpi":
             assert False, "not implemented yet."
 
-        return func_values, g_list
+        return func_values, n_model_evals, g_list
 
     def _expensive_func(self, inputs):
         '''
         :param inputs: array MxD, each row is a point in D-space
         :return:
-            * score_values: 1d array of M scalars that are score(s);
-            * g_list (optional): list of 2d arrays representing
-            g(d, p_best)
+            * efp_values: list of M scalars that are estimated feasibility
+            probabilities;
         '''
         d_mat = inputs
-        p_best = np.array([self._data_handler.get_p_best()])
+        p_samples = self._data_handler.get_p_samples()
+        # WARNING: We assume here that p_weights are normalized already!!!
         must_store_g = self._eval_options['store_constraints']
 
         d_shape = np.shape(d_mat)
@@ -107,21 +109,32 @@ class DSScoreEvaluator(ExpensiveFunctionEvaluator):
             d_num, d_dim = 1, d_shape
         else:
             d_num, d_dim = d_shape
-        score_values = np.ndarray(d_num)
 
-        g_list = self._eval_options['ufunc_ptr'](d_mat, p_best)
+        p_num = len(p_samples)
+        p_dim = len(p_samples[0]['c'])
+        p_mat = np.empty((p_num, p_dim))
+        for i, p_sample in enumerate(p_samples):
+            p_mat[i, :] = p_sample['c']
 
-        score_values = np.ndarray(d_num)
-        for i, g_vec in enumerate(g_list):
-            score = 0.0
-            if np.all(g_vec >= 0.0):
-                score = 1.0
-            score_values[i] = score
+
+        g_mat_list = self._eval_options['ufunc_ptr'](d_mat, p_mat)
+        n_model_evals = d_num * p_num
+
+        efp_values = [0.0]*d_num
+        for i, g_mat in enumerate(g_mat_list):
+            efp = 0.0
+            for j, g_vec in enumerate(g_mat):
+                if np.all(g_vec >= 0.0):
+                    efp = round(efp + p_samples[j]['w'], ndigits=15)
+                    if efp > 1.0:
+                        print("EFP > 1.0:", efp, "j=", j)
+
+            efp_values[i] = efp
 
         if not must_store_g:
-            g_list = []
+            g_mat_list = []
 
-        return score_values, g_list
+        return efp_values, n_model_evals, g_mat_list
 
     def _evaluate_using_script(self, inputs):
         self._data_handler.set_inputs(inputs)

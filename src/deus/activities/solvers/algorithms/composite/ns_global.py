@@ -4,6 +4,8 @@ import random
 import scipy.stats as scistats
 import time
 
+from deus.utils.assertions import DEUS_ASSERT
+
 from deus.activities.solvers.algorithms import \
     CompositeAlgorithm, \
     XFPoint
@@ -58,16 +60,9 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
         assert isinstance(settings, dict), \
             "The 'settings' must be a dictionary."
 
-        mandatory_keys = ['nlive', 'nreplacements',
-                          'prng_seed', 'f0', 'alpha',
-                          'stop_criteria',
-                          'debug_level', 'monitor_performance']
-        assert all(mkey in settings.keys() for mkey in mandatory_keys), \
-            "The 'settings' keys must be the following:\n" \
-            "['nlive', 'nreplacements', 'prng_seed', " \
-            "'f0', 'alpha', 'stop_criteria', " \
-            "'debug_level', 'monitor_performance']." \
-            "Look for typos, white spaces or missing keys."
+        mkeys = ['nlive', 'nproposals', 'prng_seed', 'f0', 'alpha',
+                          'stop_criteria', 'debug_level', 'monitor_performance']
+        DEUS_ASSERT.has(mkeys, settings, "settings")
 
         assert isinstance(settings["stop_criteria"], list), \
             "stop_criteria must be a list of dictionaries."
@@ -125,7 +120,7 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
             self.initialize_live_points()
 
         n = self.settings["nlive"]
-        r = self.settings["nreplacements"]
+        r = self.settings["nproposals"]
         self.empty_run_details()
 
         t0 = time.time()
@@ -173,8 +168,7 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
 
         if self._replacement_scheme == 1:
             c_algo = self.algorithms['replacement']['clustering']['algorithm']
-            bounds = np.array([self._lbs,
-                               self._ubs]).transpose()
+            bounds = np.array([self._lbs, self._ubs]).transpose()
             c_algo.set_bounds(bounds)
 
         nlive = self.settings["nlive"]
@@ -187,7 +181,7 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
 
         self.live_points.sort()
 
-    def top_up_to(self, n):
+    def top_up_to(self, n, r):
         if n < self.settings['nlive']:
             assert False, "Attempt to top up to a lower number of live points."
         elif n == self.settings['nlive']:
@@ -195,31 +189,40 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
         else:
             spawns_to_do = n - self.settings['nlive']
             while spawns_to_do > 0:
-                spawned_points_x = self.propose_replacements(spawns_to_do)
+                t0 = time.time()
+                spawned_points_x = self.propose_replacements(r)
+                cpu_proposals = time.time() - t0
+                self.run_details["cpu_secs_for_proposals"] = cpu_proposals
+
                 spawned_points_f = self._sorting_func(spawned_points_x)
+
                 spawned_points = XFPoint.list_from(spawned_points_x,
                                                    spawned_points_f)
 
                 for i, spawned in enumerate(spawned_points):
+                    if spawns_to_do == 0:
+                        break
                     for j, lpoint in enumerate(self.live_points, start=0):
+                        if spawns_to_do == 0:
+                            break
                         if spawned.f < lpoint.f:
-                            if j == 0: #  spawned < current worst
+                            if j == 0:  # spawned < current worst
                                 break
-                            else: # current worst < spawned < some live point
+                            else:  # current worst < spawned < some live point
                                 self.live_points.insert(
-                                    j, copy.deepcopy(spawned))
+                                    j-1, copy.deepcopy(spawned))
                                 self.settings['nlive'] += 1
+                                spawns_to_do -= 1
                                 break
                         # current best <= spawned
                         elif j + 1 == len(self.live_points):
                             self.live_points.insert(
-                                j+1, copy.deepcopy(spawned))
+                                j, copy.deepcopy(spawned))
                             self.settings['nlive'] += 1
+                            spawns_to_do -= 1
                             break
 
-                spawns_to_do = n - self.settings['nlive']
-
-    def evaluate_live_points_fvalue(self):
+    def request_live_points_reevaluation(self):
         coords = XFPoint.coords_of(self.live_points)
         fvalues = self._sorting_func(coords)
         self.live_points = XFPoint.list_from(coords, fvalues)
@@ -268,7 +271,7 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
             elif samp_algo.get_ui_name() == "ellipsoid":
                 centre = np.mean(lpts_coords, axis=0)
                 cov = np.cov(lpts_coords.transpose())
-                chol_mat = np.linalg.cholesky(cov)
+                chol_mat = self.obtain_cholesky_matrix(cov)
                 f = self.enlargement
                 scale = (1.0 + f)*self._chi99_scale
                 envelope = {"centre": centre, "cholesky": chol_mat, "scale": scale}
@@ -297,7 +300,7 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
             for k, caop in enumerate(list_of_caop):
                 centre = np.mean(caop, axis=0)
                 cov = np.cov(caop.transpose())
-                chol_mat = np.linalg.cholesky(cov)
+                chol_mat = self.obtain_cholesky_matrix(cov)
 
                 n_k, n_dims = np.shape(caop)
                 f_ik = self.enlargement*np.sqrt(float(n)/n_k)
@@ -306,7 +309,7 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
                 envelope = {"centre": centre,
                             "cholesky": chol_mat,
                             "scale": scale}
-                volume = f_ik*np.prod(chol_mat)
+                volume = f_ik * np.prod(np.array([chol_mat[ii, ii] for ii in range(n_dims)]))
                 body = {
                     "type": "ellipsoid",
                     "definition": envelope,
@@ -363,3 +366,11 @@ class NestedSamplingWithGlobalSearch(CompositeAlgorithm):
     def get_best_point(self):
         return self.live_points[-1]
 
+    def obtain_cholesky_matrix(self, cov):
+        one_dimensional_case = bool(len(np.shape(cov)) == 0)
+        if one_dimensional_case:
+            cov_2d = np.array([[float(cov)]])
+            chol_mat = np.linalg.cholesky(cov_2d)
+        else:
+            chol_mat = np.linalg.cholesky(cov)
+        return chol_mat

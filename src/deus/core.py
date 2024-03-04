@@ -3,8 +3,12 @@ import pickle
 from os import makedirs, remove
 from os.path import exists
 
-from deus.activities import DesignSpaceManager, ParameterEstimationManager
-from deus import utils
+from deus.utils.assertions import DEUS_ASSERT
+
+from deus.activities import \
+    DesignSpaceManager, \
+    ParameterEstimationManager, \
+    SetMembershipEstimationManager
 
 
 class DEUS:
@@ -40,9 +44,14 @@ class DEUS:
                 if activity == "pe":
                     self.activity_manager = ParameterEstimationManager(
                         self.activity_form)
-                elif activity == "ds":
+                elif activity == "dsc":
                     self.activity_manager = DesignSpaceManager(
                         self.activity_form)
+                elif activity == "sme":
+                    self.activity_manager = SetMembershipEstimationManager(
+                        self.activity_form)
+                else:
+                    assert False, "Unrecognized activity."
 
     def solve(self):
         self.activity_manager.solve_problem()
@@ -52,12 +61,8 @@ class DEUS:
         assert isinstance(a_form, dict), \
             "The activity form must be a dictionary."
 
-        mandatory_keys = ['activity_type', 'problem', 'activity_settings',
-                          'solver']
-        assert all(mkey in a_form.keys() for mkey in mandatory_keys), \
-            "The activity form should have the following keys:\n" \
-            "['activity_type', 'problem', 'activity_settings', 'solver']." \
-            "Look for typos, white spaces or missing keys."
+        mkeys = ['activity_type', 'activity_settings', 'problem', 'solver']
+        DEUS_ASSERT.has(mkeys, a_form, "activity form")
         return True
 
     def delete_all_files_in_cs_folder(self):

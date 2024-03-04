@@ -1,12 +1,13 @@
-# **DEUS Python3 Package**
+# **DEUS Python Package**
 
 
 ## **1. Goal**
 
 DEsign under Uncertainty using Sampling techniques (DEUS for short) offers Nested Sampling based methods for solving the following problems:
 - parameter estimation (PE)
-- set-membership estimation (SME)
+- parameter set membership (PSM)
 - design space characterization (DS)
+
 
 
 ## **2. Building the package**

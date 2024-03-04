@@ -1,3 +1,5 @@
+from deus.utils.assertions import DEUS_ASSERT
+
 
 def item_by_key(key_name, list_of_dicts):
     return [item for item in list_of_dicts if key_name in item.keys()][0]

@@ -8,56 +8,66 @@ import time
 
 from deus import DEUS
 '''
-Design Space - Test 2:
-See 'ds_test2_user_script.py' for a case description.
+Kucherenko et al 2019:
+See 'batch_script.py' for a case description.
 '''
 
+# For nominal/deterministic phase
+E1_nom = 2500.2
+E2_nom = 5000.1
+k01 = 0.0641
+k02 = 9938.1
+theta_nominal = [E1_nom, E2_nom, k01, k02]
 
-p_best = 1.0
-p_sdev = np.sqrt(0.3)
-
-np.random.seed(1)
-n_samples_p = 30
-p_samples = np.random.normal(p_best, p_sdev, n_samples_p)
-p_samples = [{'c': [p], 'w': 1.0/n_samples_p} for p in p_samples]
+# For probabilistic phase
+theta_mean = np.array(theta_nominal)
+variation_coeff = 0.01  # sdev_i/mean_i, i=1,...,4
+theta_sdev = [variation_coeff*m for m in theta_mean]
+theta_cov = np.zeros((4, 4))
+np.fill_diagonal(theta_cov, [s*s for s in theta_sdev])
+# Generate samples from model parameter distribution
+np.random.seed(1989)
+n_theta = 32
+theta_samples = np.random.multivariate_normal(theta_mean, theta_cov, n_theta)
+theta_samples = [{'c': p, 'w': 1.0/n_theta} for p in theta_samples]
 
 the_activity_form = {
     "activity_type": "dsc",
 
     "activity_settings": {
-        "case_name": "DS_Test2",
+        "case_name": "batch",
         "case_path": os.getcwd(),
         "resume": False,
         "save_period": 10
     },
 
     "problem": {
-        "user_script_filename": "ds_test2_user_script",
+        "user_script_filename": "batch_script",
         "constraints_func_name": "g_func",
-        "parameters_best_estimate": [p_best],
-        "parameters_samples": p_samples,
-        "target_reliability": 0.95,
+        "parameters_best_estimate": theta_nominal,
+        "parameters_samples": theta_samples,
+        "target_reliability": 0.75,
         "design_variables": [
-            {"d1": [-1.0, 1.0]},
-            {"d2": [-1.0, 1.0]}
+            {"t_batch": [250., 350.]},
+            {"T": [250., 350.]}
         ]
     },
 
     "solver": {
         "name": "dsc-ns",
         "settings": {
-            "score_evaluation": {
-                "method": "serial",
-                "score_type": "indicator",
-                "constraints_func_ptr": None,
-                "store_constraints": False
-            },
             # "score_evaluation": {
-            #     "method": "mppool",
-            #     "score_type": "indicator",
-            #     "pool_size": -1,
-            #     "store_constraints": True
+            #     "method": "serial",
+            #     "score_type": "sigmoid",
+            #     "constraints_func_ptr": None,
+            #     "store_constraints": False
             # },
+            "score_evaluation": {
+                "method": "mppool",
+                "score_type": "sigmoid",
+                "pool_size": -1,
+                "store_constraints": True
+            },
             # "efp_evaluation": {
             #     "method": "serial",
             #     "constraints_func_ptr": None,
@@ -70,8 +80,8 @@ the_activity_form = {
             },
             "phases_setup": {
                 "initial": {
-                    "nlive": 300,
-                    "nproposals": 100
+                    "nlive": 200,
+                    "nproposals": 60
                 },
                 "deterministic": {
                     "skip": False
@@ -84,11 +94,11 @@ the_activity_form = {
                     "nlive_change": {
                         "mode": "user_given",
                         "schedule": [
-                            (.00, 320, 80),
-                            (.25, 340, 80),
-                            (.50, 360, 80),
-                            (.75, 380, 60),
-                            (.80, 400, 60)
+                            (.00, 220, 80),
+                            (.25, 240, 80),
+                            (.50, 260, 80),
+                            (.75, 280, 60),
+                            (.80, 300, 60)
                         ]
                     }
                 }
@@ -102,9 +112,9 @@ the_activity_form = {
                      "nproposals": 5,  # This is overriden by points_schedule
                      "prng_seed": 1989,
                      "f0": 0.05,
-                     "alpha": 0.3,
+                     "alpha": 0.75,
                      "stop_criteria": [
-                         {"max_iterations": 10000}
+                         {"max_iterations": 100000}
                      ],
                      "debug_level": 0,
                      "monitor_performance": False
@@ -134,53 +144,32 @@ with open(cs_path + '/' + cs_name + '/' + 'output.pkl', 'rb') \
         as file:
     output = pickle.load(file)
 
-samples = output["solution"]["deterministic_phase"]["samples"]
-coords_in_det_ds = np.empty((0, 2))
-coords_out_det_ds = np.empty((0, 2))
-score_type = \
-    the_activity_form["solver"]["settings"]["score_evaluation"]["score_type"]
-if score_type == "sigmoid":
-    thrs = -2 * np.log(2)
-elif score_type == "indicator":
-    thrs = 1.0
+samples = output["solution"]["probabilistic_phase"]["samples"]
+inside_samples_coords = np.empty((0, 2))
+outside_samples_coords = np.empty((0, 2))
+threshold = the_activity_form["problem"]["target_reliability"]
 for i, phi in enumerate(samples["phi"]):
-    if phi >= thrs:
-        coords_in_det_ds = np.append(
-            coords_in_det_ds, [samples["coordinates"][i]], axis=0)
+    if phi >= threshold:
+        inside_samples_coords = np.append(inside_samples_coords,
+                                          [samples["coordinates"][i]], axis=0)
     else:
-        coords_out_det_ds = np.append(
-            coords_out_det_ds, [samples["coordinates"][i]], axis=0)
+        outside_samples_coords = np.append(outside_samples_coords,
+                                           [samples["coordinates"][i]], axis=0)
 
 fig1 = plt.figure()
-x = coords_in_det_ds[:, 0]
-y = coords_in_det_ds[:, 1]
-plt.scatter(x, y, s=10, c='g', alpha=0.5, label='inside nominal DS')
+plt.xlabel(r'$\tau_{batch}$, min')
+plt.ylabel(r'$T$, K')
+plt.xlim([250, 350])
+plt.ylim([250, 350])
+x = inside_samples_coords[:, 0]
+y = inside_samples_coords[:, 1]
+plt.scatter(x, y, s=10, c='r', alpha=1.0, label='inside DS', rasterized=True)
 
-x = coords_out_det_ds[:, 0]
-y = coords_out_det_ds[:, 1]
-plt.scatter(x, y, s=10, c='b', alpha=0.25, label='outside nominal DS')
+x = outside_samples_coords[:, 0]
+y = outside_samples_coords[:, 1]
+plt.scatter(x, y, s=10, c='b', alpha=0.5, label='outside DS', rasterized=True)
 plt.legend()
-
-samples = output["solution"]["probabilistic_phase"]["samples"]
-coords_in_prob_ds = np.empty((0, 2))
-coords_out_prob_ds = np.empty((0, 2))
-thrs = the_activity_form["problem"]["target_reliability"]
-for i, phi in enumerate(samples["phi"]):
-    if phi >= thrs:
-        coords_in_prob_ds = np.append(coords_in_prob_ds,
-                                      [samples["coordinates"][i]], axis=0)
-    else:
-        coords_out_prob_ds = np.append(coords_out_prob_ds,
-                                       [samples["coordinates"][i]], axis=0)
-
-x = coords_in_prob_ds[:, 0]
-y = coords_in_prob_ds[:, 1]
-plt.scatter(x, y, s=10, c='r', alpha=1.0, label='inside target DS')
-
-x = coords_out_prob_ds[:, 0]
-y = coords_out_prob_ds[:, 1]
-plt.scatter(x, y, s=10, c='k', alpha=0.75, label='outside target DS')
-plt.legend()
+plt.grid()
 plt.show()
 
 

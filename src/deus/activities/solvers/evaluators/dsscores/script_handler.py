@@ -4,6 +4,8 @@ from deus.activities.solvers.evaluators import EvaluationScriptHandler
 class DSScoreEvalScriptHandler(EvaluationScriptHandler):
     def __init__(self, info, eval_method, eval_options, data_handler):
         super().__init__(info, eval_method)
+        self.score_type = info['score_type']
+
         self.eval_options = eval_options
         self.data_handler = data_handler
 
@@ -18,6 +20,27 @@ class DSScoreEvalScriptHandler(EvaluationScriptHandler):
             assert False, "not implemented yet."
 
         return script
+
+    def _indicator_func_body(self, indent=""):
+        atxt = indent + "score = 0.0\n"
+        atxt += indent + "if np.all(g_vec >= 0.0):\n"
+        atxt += indent + self._tab + "score = 1.0\n"
+        return atxt
+
+    def _sigmoid_func_body(self, indent=""):
+        atxt = indent + "if np.all(g_vec[0, :] >= 0.0):\n"
+        atxt += indent + self._tab + \
+                "terms = [np.log(1.0 + np.exp(-g)) for g in g_vec[0, :]]\n"
+        atxt += indent + "else:\n"
+        atxt += indent + self._tab + "terms = []\n"
+        atxt += indent + self._tab + "for g in g_vec[0, :]:\n"
+        atxt += indent + self._2tabs + "if g >= 0.0:\n"
+        atxt += indent + self._3tabs + "term = 0.693147180559945\n"
+        atxt += indent + self._2tabs + "else:\n"
+        atxt += indent + self._3tabs + "term = np.log(1.0 + np.exp(-g))\n"
+        atxt += indent + self._2tabs + "terms.append(term)\n"
+        atxt += indent + "score = -sum(terms)\n"
+        return atxt
 
     # Serial Evaluation
     def _serial_script(self):
@@ -54,15 +77,21 @@ class DSScoreEvalScriptHandler(EvaluationScriptHandler):
 
         atxt += indent + "g_list = " + self.ufunc_name + "(d_mat, p_best)\n"
 
+        atxt += indent + "g_dim = np.shape(g_list[0])[1]\n"
+
         atxt += indent + "score_values = np.ndarray(d_num)\n"
         atxt += indent + "for i, g_vec in enumerate(g_list):\n"
-        atxt += indent + self._tab + "score = 0.0\n"
-        atxt += indent + self._tab + "if np.all(g_vec >= 0.0):\n"
-        atxt += indent + self._2tabs + "score = 1.0\n"
-        atxt += indent + self._tab + "score_values[i] = score" +\
-                self._blank_line
+
+        if self.score_type == "indicator":
+            atxt += indent + self._indicator_func_body(indent + self._tab)
+        elif self.score_type == "sigmoid":
+            atxt += indent + self._sigmoid_func_body(indent + self._tab)
+
+        atxt += indent + self._tab + "score_values[i] = score"
+        atxt += self._blank_line
 
         atxt += indent + "data['out'] = score_values\n"
+        atxt += indent + "data['g_dim'] = g_dim\n"
         if must_store_g:
             atxt += indent + "data['g_list'] = g_list"
 
@@ -111,16 +140,24 @@ class DSScoreEvalScriptHandler(EvaluationScriptHandler):
         atxt = "def calculate_output_for(ichunk):\n"
         atxt += \
             self._tab + "g_list = " + self.ufunc_name + "(ichunk, p_best)\n" +\
+            self._tab + "g_dim = np.shape(g_list[0])[1]\n" +\
             self._tab + "ochunk = []\n" +\
-            self._tab + "for i, g_vec in enumerate(g_list):\n" +\
-            self._2tabs + "score = 0.0\n" +\
-            self._2tabs + "if np.all(g_vec >= 0.0):\n" +\
-            self._3tabs + "score = 1.0\n"
+            self._tab + "for i, g_vec in enumerate(g_list):\n"
+
+        if self.score_type == "indicator":
+            atxt += self._indicator_func_body(self._2tabs)
+        elif self.score_type == "sigmoid":
+            atxt += self._sigmoid_func_body(self._2tabs)
 
         if must_store_g:
-            atxt += self._2tabs + "item = {'score': score, 'g_vec': g_vec}\n"
+            atxt += self._2tabs + "item = {" \
+                                  "'score': score, " \
+                                  "'g_vec': g_vec, " \
+                                  "'g_dim': g_dim}\n"
         else:
-            atxt += self._2tabs + "item = {'score': score}\n"
+            atxt += self._2tabs + "item = {" \
+                                  "'score': score, " \
+                                  "'g_dim': g_dim}\n"
 
         atxt += self._2tabs + "ochunk.append(item)\n" + \
                 self._tab + "return ochunk"
@@ -156,7 +193,8 @@ class DSScoreEvalScriptHandler(EvaluationScriptHandler):
             self._tab + "for chunk in output_chunks:\n" +\
             self._2tabs + "outputs.extend(chunk)" +\
             self._blank_line + \
-            self._tab + "data['out'] = [item['score'] for item in outputs]\n"
+            self._tab + "data['out'] = [item['score'] for item in outputs]\n"+\
+            self._tab + "data['g_dim'] = outputs[0]['g_dim']\n"
 
         if must_store_g:
             atxt += self._tab + "data['g_list'] = [item['g_vec'] "\

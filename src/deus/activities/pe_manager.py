@@ -1,5 +1,7 @@
 import pickle
 
+from deus.utils.assertions import DEUS_ASSERT
+
 from deus.activities import ActivityManager
 from deus.activities.output import ParameterEstimationOutputManager
 from deus.activities.solvers.factory import SolverFactory
@@ -45,11 +47,7 @@ class ParameterEstimationManager(ActivityManager):
 
         mkeys = ['user_script_filename', 'log_prior_func_name',
                  'log_lkhd_func_name', 'parameters']
-        assert all(mkey in problem.keys() for mkey in mkeys), \
-            "The 'problem' keys must include:\n" \
-            "['user_script_filename', 'log_prior_func_name'," \
-            " 'log_lkhd_func_name', 'parameters']." \
-            "Look for typos, white spaces or missing keys."
+        DEUS_ASSERT.has(mkeys, problem, "problem")
 
         parameters = problem["parameters"]
         assert isinstance(parameters, list), \

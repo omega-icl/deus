@@ -2,6 +2,8 @@ from deus.activities.solvers.ds_ns_solver import \
     DesignSpaceSolverUsingNS
 from deus.activities.solvers.pe_ns_solver import \
     ParameterEstimationSolverUsingNS
+from deus.activities.solvers.sme_ns_solver import \
+    SetMembershipEstimationSolverUsingNS
 
 
 class SolverFactory:
@@ -21,15 +23,18 @@ class SolverFactory:
                                                     problem,
                                                     settings,
                                                     algorithms)
-        elif name == "pe-mcmc":
-            assert False, "Branch not done yet. :("  # TODO
 
-        elif name == "ds-ns":
+        elif name == "dsc-ns":
             return DesignSpaceSolverUsingNS(cs_path,
                                             problem,
                                             settings,
                                             algorithms)
-        elif name == "ds-mcmc":
-            assert False, "Branch not done yet. :("  # TODO
+
+        elif name == "sme-ns":
+            return SetMembershipEstimationSolverUsingNS(cs_path,
+                                                        problem,
+                                                        settings,
+                                                        algorithms)
+
         else:
             assert False, "Solver not found."

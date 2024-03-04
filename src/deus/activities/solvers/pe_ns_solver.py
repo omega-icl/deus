@@ -2,13 +2,13 @@ import copy
 import numpy as np
 import time
 
-from deus import utils
+from deus.activities.solvers.validators import ValidatorForPESolver
 from deus.activities.interfaces import Subject
 from deus.activities.solvers.algorithms.composite.factory import \
     CompositeAlgorithmFactory
 from deus.activities.solvers.algorithms.composite import \
     NestedSamplingWithGlobalSearch
-from deus.activities.solvers.evaluators.logl_evaluator import \
+from deus.activities.solvers.evaluators.lkhd import \
     LogLkhdEvaluator
 
 
@@ -61,50 +61,7 @@ class ParameterEstimationSolverUsingNS(Subject):
         self.problem = problem
 
     def set_settings(self, settings):
-        assert isinstance(settings, dict), \
-            "The settings must be a dictionary."
-
-        mandatory_keys = ['log_lkhd_evaluation', 'stop_criteria']
-        assert all(mkey in settings.keys() for mkey in mandatory_keys), \
-            "The 'settings' keys must be the following:\n" \
-            "['log_lkhd_evaluation', 'stop_criteria']." \
-            "Look for typos, white spaces or missing keys."
-
-        logl_eval = settings["log_lkhd_evaluation"]
-        assert isinstance(logl_eval, dict),\
-            "'log_lkhd_evaluation' must be a dictionary."
-        assert 'method' in logl_eval, \
-            "'log_lkhd_evaluation' must contain 'method' key."
-
-        if logl_eval["method"] == "serial":
-            mandatory_keys = ['log_lkhd_ptr']
-            assert all(mkey in logl_eval.keys() for mkey in mandatory_keys), \
-                "for 'mppool' method, the keys must be the following:\n" \
-                "['log_lkhd_ptr']. " \
-                "Look for typos, white spaces or missing keys."
-
-        elif logl_eval["method"] == "mppool":
-            mandatory_keys = ['pool_size']
-            assert all(mkey in logl_eval.keys() for mkey in mandatory_keys), \
-                "for 'mppool' method, the keys must be the following:\n" \
-                "['pool_size']." \
-                "Look for typos, white spaces or missing keys."
-            assert isinstance(logl_eval['pool_size'], int), \
-                "'n_processes' must be an integer."
-            n_procs = logl_eval['pool_size']
-            assert (n_procs == -1 or n_procs >= 2), \
-                "'pool_size' must be >=2 or -1.\n"\
-                "-1: # processes = # logical cores."
-
-        elif logl_eval["method"] == "mpi":
-            assert False, "Not implemented yet."
-        else:
-            assert False, "'log_lkhd_evaluation' method not recognized."
-
-        specified_stop_criteria = utils.keys_in(settings["stop_criteria"])
-        assert 'contribution_to_evidence' in specified_stop_criteria, \
-            "'contribution_to_evidence' must be the stop criterion."
-
+        ValidatorForPESolver.check_settings(settings)
         self.settings = settings
 
     def set_algorithms(self, algos):
@@ -112,15 +69,7 @@ class ParameterEstimationSolverUsingNS(Subject):
             "Define 'problem' before the algorithms of 'pe_solver'."
         assert self.settings is not None, \
             "Define 'settings' before the algorithms of 'pe_solver'."
-        assert isinstance(algos, dict), \
-            "algorithms must be a dictionary."
-
-        mandatory_keys = ['sampling']
-        assert all(mkey in algos.keys() for mkey in mandatory_keys), \
-            "The 'algorithms' of 'pe_solver' should be for the steps:\n" \
-            "['sampling']. " \
-            "Look for typos, white spaces or missing keys."
-
+        ValidatorForPESolver.check_algorithms(algos)
         algos_permitted = [NestedSamplingWithGlobalSearch.get_type() + "-" +
                            NestedSamplingWithGlobalSearch.get_ui_name()]
 
@@ -156,8 +105,11 @@ class ParameterEstimationSolverUsingNS(Subject):
             eval_options = {
                 'pool_size': logl_eval["pool_size"]
             }
-        else:
+        elif eval_method == "mpi":
             assert False, "Not implemented yet."
+
+        else:
+            assert False, "Unrecognized method."
 
         self._evaluator = LogLkhdEvaluator(evaluator_info,
                                            eval_method,
@@ -351,9 +303,6 @@ class ParameterEstimationSolverUsingNS(Subject):
                 "log_zd": log_zd_new
             }
             nests.append(nest)
-            # self.results["log_x"].append(self.log_x)
-            # self.results["log_zd"].append(self.log_zd)
-            # self.results["hd"].append(self.hd)
         return nests
 
     def update_logz_and_kldiv(self):

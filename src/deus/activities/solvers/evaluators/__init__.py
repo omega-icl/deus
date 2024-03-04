@@ -70,7 +70,6 @@ class EvaluationScriptHandler:
         self.ufunc_name = info['ufunc_name']
         self.eval_method = eval_method
 
-
         self._ufunc_script_fne = self.ufunc_script_name + '.py'
         self._eval_script_fn = "temp_evaluation_script"
         self._eval_script_fne = self._eval_script_fn + ".py"
@@ -78,7 +77,7 @@ class EvaluationScriptHandler:
 
         self._tab = "    "
         self._2tabs = self._tab + self._tab
-        self._3tabs = self._tab + self._tab + self._tab
+        self._3tabs = self._2tabs + self._tab
         self._blank_line = "\n\n"
         self._2blank_lines = "\n\n\n"
 

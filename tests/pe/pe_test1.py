@@ -66,7 +66,7 @@ an_activity_form = {
                 "algorithm": "mc_sampling-ns_global",
                 "settings": {
                      "nlive": 100,
-                     "nreplacements": 50,
+                     "nproposals": 50,
                      "prng_seed": 1989,
                      "f0": 0.3,
                      "alpha": 0.2,

@@ -20,7 +20,7 @@ class CleanCommand(Command):
 
 setup(
     name='deus',
-    version='1.0.0',
+    version='1.3.0',
 
     author="Lucian Gomoescu, "
 		   "Kennedy Putra Kusumo, "

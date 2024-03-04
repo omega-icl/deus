@@ -5,75 +5,80 @@ import pickle
 from scipy.stats import multivariate_normal
 import time
 
-from duu import DUU
+from deus import DEUS
 
 
 '''
-Set-membership Parameter Estimation - Test 1: 2D box
-    Sample from a box [0, 2] x [0, 2]
+Set Membership Estimation - Test 1:
+Characterize the parameters set which guarantees that the errors
+are within the given bounds i.e., e_i \in [-e_bar,i, +e_bar,i] 
+for i=1,...,N.
 '''
 
-# Setting up an example
-def log_prior(p):
-    # I am an unused dummy prior :D
-    return -1.0e20
+
+def the_errors_func(p):
+    p_num, p_dim = np.shape(p)
+
+    y_msred = np.array([0.0, 0.0])
+
+    errors_mat = np.ndarray((p_num, 2))
+    for i, p_vec in enumerate(p):
+        y_model = p_vec
+        errors_mat[i, :] = y_model - y_msred
+
+    answer = errors_mat
+    return answer
 
 
-def log_lkhd(p):
-    # this test uses an indicator function with Gaussian tails
-    inv_covariance = np.eye(2)*3.0**2
-    
-    if np.all(0.0*np.ones(2) <= p) and np.all(p <= 2.0*np.ones(2)):
-        f = 0
-    else:
-        f = -1/2*(p-1.0*np.ones(2))@inv_covariance@np.transpose(p-1.0*np.ones(2))
-        
-    return f
-
-# Setting up options (including search range in "problem":"parameters")
-an_activity_form = {
-    "activity_type": "pe",
+the_activity_form = {
+    "activity_type": "sme",
 
     "activity_settings": {
-        "case_name": "SmeTest1",
         "case_path": getcwd(),
+        "case_name": "SmeTest1",
         "resume": False,
         "save_period": 1
     },
 
     "problem": {
-        "goal": "posterior",
-        "log_pi": log_prior,
-        "log_l": log_lkhd,
+        "user_script_filename": "sme_test1_user_script",
+        "errors_func_name": "the_errors_func",
+        "errors_bound": [1., 1.],
         "parameters": [
-            {"theta1": [-10.0, 10.0]},
-            {"theta2": [-10.0, 10.0]}
+            {"p1": [-10, 10]},
+            {"p2": [-10, 10]}
         ]
     },
 
     "solver": {
-        "name": "pe-ns",
+        "name": "sme-ns",
         "settings": {
-            "parallel": "no",
-            "stop_criteria": [
-                {"contribution_to_evidence": 0.10}
-            ]
+            "spread_to_error_bound": 0.3333,
+            "errors_evaluation": {
+                "method": "serial",
+                "errors_func_ptr": the_errors_func
+                # "errors_func_ptr": None
+            }
+            # "errors_evaluation": {
+            #     "method": "mppool",
+            #     "pool_size": -1,
+            # }
         },
         "algorithms": {
             "sampling": {
                 "algorithm": "mc_sampling-ns_global",
                 "settings": {
-                    "nlive": 300,
-                    "nreplacements": 150,
-                    "prng_seed": 1989,
-                    "f0": 0.3,
-                    "alpha": 0.2,
-                    "stop_criteria": [
-                        {"max_iterations": 10000}
-                    ],
-                    "debug_level": 0,
-                    "monitor_performance": False
-                },
+                     "nlive": 200,
+                     "nproposals": 100,
+                     "prng_seed": 1989,
+                     "f0": 0.1,
+                     "alpha": 0.05,
+                     "stop_criteria": [
+                         {"max_iterations": 100000}
+                     ],
+                     "debug_level": 0,
+                     "monitor_performance": False
+                 },
                 "algorithms": {
                     "replacement": {
                         "sampling": {
@@ -86,83 +91,85 @@ an_activity_form = {
     }
 }
 
-# Running and processing
-the_duu = DUU(an_activity_form)
+the_deus = DEUS(the_activity_form)
 t0 = time.time()
-the_duu.solve()
+the_deus.solve()
 cpu_time = time.time() - t0
 print('CPU seconds', cpu_time)
 
-cs_path = an_activity_form["activity_settings"]["case_path"]
-cs_name = an_activity_form["activity_settings"]["case_name"]
+cs_path = the_activity_form["activity_settings"]["case_path"]
+cs_name = the_activity_form["activity_settings"]["case_name"]
 
 with open(cs_path + '/' + cs_name + '/' + 'output.pkl', 'rb')\
         as file:
     output = pickle.load(file)
 
-n_eval = an_activity_form["solver"]["algorithms"]["sampling"]["settings"]["nlive"];
-for i in range(len(output['performance'])):
-    n_eval += output['performance'][i]["n_proposals"]
-    
-print('Number of evaluations: ', n_eval)
+samples = output["solution"]["search_phase"]["samples"]
+coords_in_set = np.empty((0, 2))
+coords_out_set = np.empty((0, 2))
 
-log_z_mean = output["solution"]["log_z"]["hat"]
-log_z_sdev = output["solution"]["log_z"]["sdev"]
-h = output["solution"]["post_prior_kldiv"]
-print('log Z =', log_z_mean, '+/-', log_z_sdev)
-print('H =', h)
+thrs = 0.0
 
-samples = output["solution"]["samples"]
-weights = output["solution"]["samples"]["weights"]
-samples_coords = np.empty((0, 2))
-samples_coords_in = np.empty((0, 2))
-samples_weights = np.empty(0)
-for i, sample in enumerate(samples["coordinates"]):
-    samples_coords = np.append(samples_coords, [sample],
-                               axis=0)
-    samples_weights = np.append(samples_weights, [weights[i]],
-                                axis=0)
-    if samples["log_l"][i] == 0:
-        samples_coords_in = np.append(samples_coords_in, np.array([samples["coordinates"][i]]), axis=0)
-
+for i, phi in enumerate(samples["phi"]):
+    if phi >= thrs:
+        coords_in_set = np.append(
+            coords_in_set, [samples["coordinates"][i]], axis=0)
+    else:
+        coords_out_set = np.append(
+            coords_out_set, [samples["coordinates"][i]], axis=0)
 
 fig1 = plt.figure()
-x = samples_coords[:, 0]
-y = samples_coords[:, 1]
-plt.scatter(x, y, s=5, c='r')
-x = samples_coords_in[:, 0]
-y = samples_coords_in[:, 1]
-plt.scatter(x, y, s=10, c='b')
+x = coords_in_set[:, 0]
+y = coords_in_set[:, 1]
+plt.scatter(x, y, s=10, c='g', alpha=1.0, label='inside target set')
 
-fig2 = plt.figure()
-plt.scatter(x, y, s=5, c='r')
-x = samples_coords_in[:, 0]
-y = samples_coords_in[:, 1]
-plt.scatter(x, y, s=10, c='b')
+x = coords_out_set[:, 0]
+y = coords_out_set[:, 1]
+plt.scatter(x, y, s=10, c='r', alpha=0.75, label='outside target set')
+plt.legend()
 
-fig3 = plt.figure()
-x = np.arange(len(samples_weights))
-y = samples_weights
-plt.plot(x, y, c='g')
 
-fig4, ax = plt.subplots(1)
-x = [item["iteration"] for item in output["performance"]]
-y = [item["cpu_secs"]["proposals"]
-     for item in output["performance"]]
-ax.plot(x, y, 'b-', label='proposals generation')
+fig2, ax = plt.subplots(1)
+phase = "search_phase"
+source = output["performance"][phase]
 
-x = [item["iteration"] for item in output["performance"]]
-y = [item["cpu_secs"]["lkhd_evals"]
-     for item in output["performance"]]
-ax.plot(x, y, 'r-', label='likelihood evaluations')
+x = [item["iteration"] for item in source]
+y1 = [item["cpu_time"]["proposing"] for item in source]
+ax.plot(x, y1, 'b-o', label='proposals generation')
 
-x = [item["iteration"] for item in output["performance"]]
-y = [item["cpu_secs"]["total"] for item in output["performance"]]
-ax.plot(x, y, 'g--', label='total')
+y2 = [item["cpu_time"]["evaluating"] for item in source]
+ax.plot(x, y2, 'r-o', label='phi evaluation')
 
+y3 = np.array(y1) + np.array(y2)
+ax.plot(x, y3, 'g--o', label='total')
+
+ax.set_xlabel('iteration')
 ax.set_ylabel('CPU seconds')
 ax.grid()
 ax.legend()
 
+
+fig3, ax = plt.subplots(1)
+phase = "search_phase"
+source = output["performance"][phase]
+
+x = [item["iteration"] for item in source]
+y = [item["n_evals"]["phi"] for item in source]
+line1 = ax.plot(x, y, 'k-o', label='n proposals')
+
+y = [item["n_replacements_done"] for item in source]
+line2 = ax.plot(x, y, 'g-o', label='n replacements')
+
+y = [item["n_evals"]["model"] for item in source]
+ax2 = ax.twinx()
+line3 = ax2.plot(x, y, 'b-o', label='n model evals')
+
+ax2.set_ylabel('# model evaluations')
+ax.set_xlabel('iteration')
+ax.set_ylabel('# proposals | replacements')
+ax.grid()
+lines = line1 + line2 + line3
+labels = [l.get_label() for l in lines]
+ax.legend(lines, labels, loc=0)
 
 plt.show()

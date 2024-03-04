@@ -44,12 +44,13 @@ class EFPEvalScriptHandler(EvaluationScriptHandler):
 
     def _serial_efp_evaluation(self, indent=""):
         must_store_g = self.eval_options['store_constraints']
-        must_accelerate = self.eval_options['acceleration']
+        # must_accelerate = self.eval_options['acceleration']
 
         atxt = indent + "d_mat = data['in']\n"
         atxt += indent + "p_samples = data['p_samples']\n"
-        atxt += indent + "worst_efp = data['worst_efp']\n" \
-                + self._blank_line
+        # atxt += indent + "worst_efp = data['worst_efp']\n" \
+        #         + self._blank_line
+        atxt += self._blank_line
 
         atxt += indent + "d_shape = np.shape(d_mat)\n"
         atxt += indent + "if len(d_shape) == 1:\n"
@@ -118,19 +119,13 @@ class EFPEvalScriptHandler(EvaluationScriptHandler):
         return atxt
 
     def _mppool_global_data(self):
-        atxt = "p_samples = data['p_samples']\n"
-        # atxt += "p_num = len(p_samples)\n"
-        # atxt += "p_dim = len(p_samples[0]['c'])\n"
-        # atxt += "p_mat = np.empty((p_num, p_dim))\n"
-        # atxt += "for i, p_sample in enumerate(p_samples):\n"
-        # atxt += self._tab + "p_mat[i, :] = p_sample['c']\n"
-
-        atxt += "worst_efp = data['worst_efp']"
+        atxt = "p_samples = data['p_samples']"
+        # atxt += "worst_efp = data['worst_efp']"
         return atxt
 
     def _mppool_chunks_evaluation_func(self):
         must_store_g = self.eval_options['store_constraints']
-        must_accelerate = self.eval_options['acceleration']
+        # must_accelerate = self.eval_options['acceleration']
 
         atxt = "def calculate_output_for(ichunk):\n"
 
@@ -147,7 +142,7 @@ class EFPEvalScriptHandler(EvaluationScriptHandler):
         atxt += self._2tabs + "d_num, d_dim = d_shape" + self._blank_line
 
         atxt +=\
-            self._tab + "n_model_evals = d_num * p_num\n" +\
+            self._tab + "n_model_evals = p_num\n" +\
             self._tab + "g_mat_list = " + self.ufunc_name + \
             "(ichunk, p_mat)\n" +\
             self._tab + "ochunk = []\n" +\

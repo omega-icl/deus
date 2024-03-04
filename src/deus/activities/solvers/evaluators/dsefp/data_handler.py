@@ -18,9 +18,9 @@ class EFPEvalDataHandler(EvaluationDataHandler):
     def get_p_samples(self):
         return self._p_samples
 
-    def set_worst_efp(self, worst):
-        self._worst_efp = worst
-        self._data.update({'worst_efp': worst})
+    # def set_worst_efp(self, worst):
+    #     self._worst_efp = worst
+    #     self._data.update({'worst_efp': worst})
 
     def get_worst_efp(self):
         return self._worst_efp

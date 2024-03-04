@@ -3,11 +3,11 @@ import pickle
 from deus.utils.assertions import DEUS_ASSERT
 
 from deus.activities import ActivityManager
-from deus.activities.output import DesignSpaceOutputManager
+from deus.activities.output import SetMembershipEstimationOutputManager
 from deus.activities.solvers.factory import SolverFactory
 
 
-class DesignSpaceManager(ActivityManager):
+class SetMembershipEstimationManager(ActivityManager):
     def __init__(self, activity_form):
         super().__init__()
         self.check_activity_type(activity_form["activity_type"])
@@ -35,62 +35,42 @@ class DesignSpaceManager(ActivityManager):
 
         cs_name = self.settings["case_name"]
         self.cs_folder = cs_path + "/" + cs_name + "/"
-        self.output_manager = DesignSpaceOutputManager(self.cs_folder)
+        self.output_manager = \
+            SetMembershipEstimationOutputManager(self.cs_folder)
 
     def check_activity_type(self, a_type):
-        assert a_type == "dsc", \
-            "The activity type must be \"ds\". Recheck the activity form."
+        assert a_type == "sme", \
+            "The activity type must be \"sme\". Recheck the activity form."
 
     def check_problem(self, problem):
         assert isinstance(problem, dict), \
             "'problem' must be a dictionary."
 
-        mkeys = ['user_script_filename', 'constraints_func_name',
-                 'parameters_best_estimate', 'parameters_samples',
-                 'target_reliability', 'design_variables']
+        mkeys = ['user_script_filename', 'errors_func_name', 'errors_bound',
+                 'parameters']
         DEUS_ASSERT.has(mkeys, problem, "problem")
 
-        assert(0. <= problem['target_reliability'] <= 1.), \
-            "'target_reliability' must be in [0, 1]."
+        errors_bound = problem["errors_bound"]
+        assert isinstance(errors_bound, list), \
+            "'errors_bound', must be a list of positive real numbers."
 
-        p_best_estimate = problem['parameters_best_estimate']
-        assert isinstance(p_best_estimate, list),\
-            "'parameters_best_estimate' must be a list."
-        assert (len(p_best_estimate) ==
-                len(problem['parameters_samples'][0]['c'])), \
-            "'parameters_best_estimate' and 'parameters_samples' must have" \
-            " the same dimensionality."
-
-        p_samples = problem['parameters_samples']
-        assert isinstance(p_samples, list), \
-            "'parameters_samples' must be a list of dictionaries."
-        for i, p_sample in enumerate(p_samples):
-            assert isinstance(p_sample, dict), \
-                "the items in 'parameters_samples' must be a dictionary."
-            mkeys = ['c', 'w']
-            assert all(mkey in p_sample.keys() for mkey in mkeys),\
-                "The 'parameters_samples' item keys must be the following:\n"\
-                "'c' - a list of coordinates, "\
-                "'w' - a scalar reperesenting a weight."\
-                "Look for typos, white spaces or missing keys."
-
-        design_variables = problem["design_variables"]
-        assert isinstance(design_variables, list), \
-            "'design_variables' must be a list of dictionaries."
-        for i, item in enumerate(design_variables):
+        parameters = problem["parameters"]
+        assert isinstance(parameters, list), \
+            "'parameters' must be a list of dictionaries."
+        for i, item in enumerate(parameters):
             assert isinstance(item, dict), \
-                "All items of 'design_variables' are dictionaries."
-            assert len(item.keys()) == 1,\
-                "Items in 'design_variables' must be a single key-value dictionary."
+                "All items of 'parameters' are dictionaries."
+            assert len(item.keys()) == 1, \
+                "'Items in 'parameters' must be a single key-value dictionary."
             for k, v in item.items():
                 assert isinstance(v, list), \
-                    "The value of any item in 'design_variables' must be as "\
+                    "The value of any 'item' in 'parameters' must be as " \
                     "[<lower_bound>, <upper_bound>]."
                 assert len(v) == 2, \
-                    "A design variable must have specified exactly one lbound "\
-                    "and one ubound."
+                    "A parameter must have specified exactly one lbound and " \
+                    "one ubound."
                 assert v[0] < v[1], \
-                    "Bad input: The lbound > ubound for design variable '" \
+                    "Bad input: The lbound > ubound for parameter '" \
                     + str(k) + "'."
 
     def solve_problem(self):
@@ -110,9 +90,7 @@ class DesignSpaceManager(ActivityManager):
                 self.output_manager.write_performance_summary()
 
     def is_time_to_save(self):
-        if self.solver.status in ["FINISHED",
-                                  "FINISHED_DETERMINISTIC_PHASE",
-                                  "SUBALGORITHM_STOPPED"]:
+        if self.solver.status in ["FINISHED", "SUBALGORITHM_STOPPED"]:
             return True
 
         save_period = self.settings["save_period"]
