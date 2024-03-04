@@ -27,7 +27,6 @@ class ModelA:
         pass
 
     def s(self, d, p):
-        time.sleep(0.0001)
         d1, d2 = d
         p1 = p[0]
         x1 = p1*d1**2 + d2
@@ -77,7 +76,7 @@ the_activity_form = {
     },
 
     "problem": {
-        "user_script_filename": "ds_test2_user_script",
+        "user_script_filename": "none",
         "constraints_func_name": "g_func",
         "parameters_best_estimate": [p_best],
         "parameters_samples": p_samples,
@@ -111,8 +110,8 @@ the_activity_form = {
             #     "store_constraints": False,
             # },
             "efp_evaluation": {
-                "method": "mppool",
-                "pool_size": -1,
+                "method": "serial",
+                "constraints_func_ptr": the_model.g_func,
                 "store_constraints": False
             },
             "phases_setup": {
